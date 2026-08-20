@@ -1,0 +1,6 @@
+.git/
+test/
+.axd-mcp-chrome/
+*.log
+.DS_Store
+.env*
