@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * @axd/browser-mcp — Model Context Protocol (MCP) Standard Server
+ * @axd/browser-mcp — Sovereign High-Speed Browser MCP Server
+ * Model Context Protocol (MCP) compliant standard server.
  * Compatible with Claude Desktop, Cursor, Windsurf, OpenCode, and any MCP Client.
  */
 
@@ -20,11 +21,12 @@ async function getSession() {
 const TOOLS = [
   {
     name: "browser_navigate",
-    description: "Navigate to a URL using sovereign stealth CDP (bypasses Cloudflare / bot checks)",
+    description: "Navigate to a URL using sovereign stealth CDP (bypasses Cloudflare & bot checks)",
     inputSchema: {
       type: "object",
       properties: {
-        url: { type: "string", description: "Target URL to navigate to" }
+        url: { type: "string", description: "Target URL to navigate to" },
+        waitMs: { type: "number", description: "Optional milliseconds to wait after navigation (default 3000)" }
       },
       required: ["url"]
     }
@@ -35,7 +37,7 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        selector: { type: "string", description: "CSS selector of element to click" }
+        selector: { type: "string", description: "CSS selector of element to click (e.g. 'button.submit', '#login')" }
       },
       required: ["selector"]
     }
@@ -47,14 +49,46 @@ const TOOLS = [
       type: "object",
       properties: {
         selector: { type: "string", description: "CSS selector of input element" },
-        text: { type: "string", description: "Text string to type" }
+        text: { type: "string", description: "Text string to type" },
+        clearFirst: { type: "boolean", description: "Whether to clear existing text before typing (default true)" }
       },
       required: ["selector", "text"]
     }
   },
   {
+    name: "browser_press_key",
+    description: "Press a keyboard key (Enter, Tab, Escape, Backspace, ArrowDown, etc.)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        key: { type: "string", description: "Key name to press, e.g. 'Enter', 'Tab', 'Escape'" }
+      },
+      required: ["key"]
+    }
+  },
+  {
+    name: "browser_scroll",
+    description: "Scroll the page vertically using smooth wheel events",
+    inputSchema: {
+      type: "object",
+      properties: {
+        deltaY: { type: "number", description: "Pixels to scroll (positive for down, negative for up, default 300)" }
+      }
+    }
+  },
+  {
+    name: "browser_screenshot",
+    description: "Capture a high-resolution screenshot of the current page viewport or full page",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fullPage: { type: "boolean", description: "Whether to capture the entire scrollable page (default false)" }
+      }
+    }
+  },
+  {
     name: "browser_extract",
-    description: "Extract clean page title, URL, and full text content in sub-milliseconds without taking expensive screenshots",
+    description: "Extract clean page title, URL, full text content, and links in <10ms without vision tokens",
     inputSchema: {
       type: "object",
       properties: {}
@@ -77,11 +111,17 @@ async function handleCall(name, args) {
   const s = await getSession();
   switch (name) {
     case "browser_navigate":
-      return await s.navigate(args.url);
+      return await s.navigate(args.url, args.waitMs);
     case "browser_click":
       return await s.click(args.selector);
     case "browser_type":
-      return await s.type(args.selector, args.text);
+      return await s.type(args.selector, args.text, args.clearFirst);
+    case "browser_press_key":
+      return await s.pressKey(args.key);
+    case "browser_scroll":
+      return await s.scroll(args.deltaY);
+    case "browser_screenshot":
+      return await s.screenshot(args.fullPage);
     case "browser_extract":
       return await s.extractContent();
     case "browser_evaluate":
@@ -136,14 +176,25 @@ rl.on("line", async (line) => {
         }
       };
       console.log(JSON.stringify(resp));
+    } else if (method === "ping") {
+      console.log(JSON.stringify({ jsonrpc: "2.0", id, result: {} }));
+    } else if (method === "resources/list" || method === "prompts/list") {
+      console.log(JSON.stringify({ jsonrpc: "2.0", id, result: { resources: [], prompts: [] } }));
     } else {
-      console.log(JSON.stringify({ jsonrpc: "2.0", id, error: { code: -32601, message: "Method not found" } }));
+      console.log(JSON.stringify({ jsonrpc: "2.0", id, error: { code: -32601, message: "Method not found: " + method } }));
     }
   } catch (e) {
-    // Malformed JSON input ignored
+    // Malformed JSON ignored
   }
 });
 
-process.on("exit", () => {
-  if (session) session.close();
-});
+const cleanup = () => {
+  if (session) {
+    session.close();
+    session = null;
+  }
+};
+
+process.on("exit", cleanup);
+process.on("SIGINT", () => { cleanup(); process.exit(0); });
+process.on("SIGTERM", () => { cleanup(); process.exit(0); });
