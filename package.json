@@ -1,0 +1,21 @@
+{
+  "name": "@axd/browser-mcp",
+  "version": "1.0.0",
+  "description": "Sovereign High-Speed In-Browser MCP Server — 100x Faster than Pixel-Based Computer Use with Un-bannable Human Cadence",
+  "main": "src/index.js",
+  "bin": {
+    "axd-browser-mcp": "./bin/axd-browser-mcp.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "cursor",
+    "browser-automation",
+    "cdp",
+    "stealth",
+    "zero-api"
+  ],
+  "author": "Diego Nanini <diegonanini23@gmail.com>",
+  "license": "MIT"
+}
