@@ -1,10 +1,14 @@
 {
   "name": "axd-browser-mcp",
-  "version": "1.0.0",
-  "description": "Sovereign High-Speed In-Browser MCP Server — 100x Faster than Pixel-Based Computer Use with Un-bannable Human Cadence",
+  "version": "1.1.0",
+  "description": "Sovereign High-Speed In-Browser & Workspace Intelligence MCP Server — 100x Faster Browser Automation & Autonomous Workspace Reorganization",
   "main": "src/index.js",
   "bin": {
     "axd-browser-mcp": "bin/axd-browser-mcp.js"
+  },
+  "scripts": {
+    "test": "node test/workspace.test.js",
+    "test:e2e": "node test/e2e.test.js"
   },
   "keywords": [
     "mcp",
@@ -14,6 +18,9 @@
     "browser-automation",
     "cdp",
     "stealth",
+    "workspace-management",
+    "chat-dedup",
+    "cowork-index",
     "zero-api"
   ],
   "author": "Diego Nanini <diegonanini23@gmail.com>",
