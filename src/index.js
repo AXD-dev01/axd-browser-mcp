@@ -7,7 +7,7 @@
 
 const readline = require("readline");
 const { BrowserSession } = require("./cdp");
-const { chatsAnalyzeAndClean, projectsReorganizeTree, coworkSpaceManager } = require("./workspace");
+const { chatsAnalyzeAndClean, recreateCleanTreeVault, projectsReorganizeTree, coworkSpaceManager } = require("./workspace");
 
 let session = null;
 
@@ -159,6 +159,18 @@ const TOOLS = [
         dryRun: { type: "boolean", description: "Preview changes without moving files (default true)" }
       }
     }
+  },
+  {
+    name: "ai_evidence_vault_recreate",
+    description: "Deep analyzes conversations across all AI platforms (Claude, ChatGPT, Perplexity, Gemini) and recreates 1 unified clean-tree evidence directory with normalized markdown transcripts, patent/breakthrough tagging, and master catalogs",
+    inputSchema: {
+      type: "object",
+      properties: {
+        evidenceVaultPath: { type: "string", description: "Target directory for the recreated evidence vault (defaults to ~/Claude/AI_EVIDENCE_VAULT)" },
+        limitPerSource: { type: "number", description: "Max items to ingest per platform archive (defaults to 500)" },
+        dryRun: { type: "boolean", description: "Preview counts without writing files (defaults to false)" }
+      }
+    }
   }
 ];
 
@@ -167,6 +179,8 @@ async function handleCall(name, args) {
   switch (name) {
     case "chats_analyze_and_clean":
       return await chatsAnalyzeAndClean(args);
+    case "ai_evidence_vault_recreate":
+      return await recreateCleanTreeVault(args);
     case "projects_reorganize_tree":
       return await projectsReorganizeTree(args);
     case "cowork_space_manager":

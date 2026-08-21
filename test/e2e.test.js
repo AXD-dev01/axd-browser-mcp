@@ -1,6 +1,6 @@
 /**
  * test/e2e.test.js — Live End-to-End Test Suite for @axd/browser-mcp (v1.1.0)
- * Tests real MCP protocol handshake, tools/list (11 tools), workspace suite calls, and browser tools.
+ * Tests real MCP protocol handshake, tools/list (12 tools), workspace suite calls, and browser tools.
  */
 
 const { spawn } = require("child_process");
@@ -50,14 +50,14 @@ async function runE2ETest() {
       throw new Error(`Expected server version 1.1.0, got ${initRes.serverInfo.version}`);
     }
 
-    // 2. Test Tools List (11 tools expected)
+    // 2. Test Tools List (12 tools expected)
     console.log("▶ 2. Testing MCP tools/list...");
     const listRes = await callMcp("tools/list");
     const tools = listRes.tools || [];
     console.log(`   ✅ Tools discovered: ${tools.length} tools`);
     tools.forEach(t => console.log(`      - ${t.name}`));
 
-    if (tools.length < 11) throw new Error("Expected at least 11 tools, found " + tools.length);
+    if (tools.length < 12) throw new Error("Expected at least 12 tools, found " + tools.length);
 
     // 3. Test chats_analyze_and_clean via MCP JSON-RPC
     console.log("▶ 3. Testing chats_analyze_and_clean via MCP call...");
@@ -68,8 +68,17 @@ async function runE2ETest() {
     const chatData = JSON.parse(chatRes.content[0].text);
     console.log(`   ✅ chats_analyze_and_clean result: scanned=${chatData.totalSessionsScanned}, valid=${chatData.validChats}, duplicates=${chatData.duplicateGroups}`);
 
-    // 4. Test projects_reorganize_tree via MCP JSON-RPC
-    console.log("▶ 4. Testing projects_reorganize_tree via MCP call...");
+    // 4. Test ai_evidence_vault_recreate via MCP JSON-RPC
+    console.log("▶ 4. Testing ai_evidence_vault_recreate via MCP call (dryRun)...");
+    const vaultRes = await callMcp("tools/call", {
+      name: "ai_evidence_vault_recreate",
+      arguments: { limitPerSource: 5, dryRun: true }
+    });
+    const vaultData = JSON.parse(vaultRes.content[0].text);
+    console.log(`   ✅ ai_evidence_vault_recreate result: indexed=${vaultData.totalIndexedAcrossAllPlatforms}, evidence=${vaultData.evidenceItemsCount}`);
+
+    // 5. Test projects_reorganize_tree via MCP JSON-RPC
+    console.log("▶ 5. Testing projects_reorganize_tree via MCP call...");
     const projRes = await callMcp("tools/call", {
       name: "projects_reorganize_tree",
       arguments: { dryRun: true }
@@ -77,8 +86,8 @@ async function runE2ETest() {
     const projData = JSON.parse(projRes.content[0].text);
     console.log(`   ✅ projects_reorganize_tree result: projectsAudited=${projData.totalProjectsAudited}, compliance=${projData.overallComplianceScore}%`);
 
-    // 5. Test cowork_space_manager via MCP JSON-RPC
-    console.log("▶ 5. Testing cowork_space_manager via MCP call...");
+    // 6. Test cowork_space_manager via MCP JSON-RPC
+    console.log("▶ 6. Testing cowork_space_manager via MCP call...");
     const coworkRes = await callMcp("tools/call", {
       name: "cowork_space_manager",
       arguments: { dryRun: true }
@@ -86,8 +95,8 @@ async function runE2ETest() {
     const coworkData = JSON.parse(coworkRes.content[0].text);
     console.log(`   ✅ cowork_space_manager result: spaces=${coworkData.activeSpacesCount}, indexGenerated=${coworkData.indexGenerated}`);
 
-    // 6. Test Browser Content Extraction on data URL (No external server dependency)
-    console.log("▶ 6. Testing browser_navigate & browser_extract on test page...");
+    // 7. Test Browser Content Extraction on data URL (No external server dependency)
+    console.log("▶ 7. Testing browser_navigate & browser_extract on test page...");
     const testHtml = "data:text/html,<html><head><title>Sovereign%20Test%20Portal</title></head><body><h1>AXD%20Live</h1><p>Running%20v1.1.0</p></body></html>";
     const navRes = await callMcp("tools/call", {
       name: "browser_navigate",
@@ -102,16 +111,16 @@ async function runE2ETest() {
     const content = JSON.parse(extRes.content[0].text);
     console.log(`   ✅ Extracted Title: "${content.title}" | Text: "${content.text.trim()}"`);
 
-    // 7. Test JavaScript Evaluation
-    console.log("▶ 7. Testing browser_evaluate...");
+    // 8. Test JavaScript Evaluation
+    console.log("▶ 8. Testing browser_evaluate...");
     const evalRes = await callMcp("tools/call", {
       name: "browser_evaluate",
       arguments: { expression: "document.title" }
     });
     console.log("   ✅ DOM Evaluated title:", JSON.parse(evalRes.content[0].text));
 
-    // 8. Test Screenshot Capture
-    console.log("▶ 8. Testing browser_screenshot...");
+    // 9. Test Screenshot Capture
+    console.log("▶ 9. Testing browser_screenshot...");
     const screenRes = await callMcp("tools/call", {
       name: "browser_screenshot",
       arguments: { fullPage: false }
