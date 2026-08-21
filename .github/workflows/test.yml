@@ -1,4 +1,4 @@
-name: Test & Verify @axd/browser-mcp
+name: Strict Integrity & Protocol Verification
 
 on:
   push:
@@ -7,19 +7,43 @@ on:
     branches: [ main ]
 
 jobs:
-  test:
+  verify:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Set up Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Verify package integrity
-        run: node -e "console.log('Testing @axd/browser-mcp syntax...'); require('./src/index.js');" || true
+      - name: Strict Syntax Check across all modules
+        run: |
+          node --check src/index.js
+          node --check src/cdp.js
+          node --check src/humanize.js
+          node --check src/stealth.js
+          node --check bin/axd-browser-mcp.js
+          node --check test/e2e.test.js
 
-      - name: Check package metadata
+      - name: Verify JSON-RPC MCP Handshake & Tool Protocol
+        run: |
+          node -e '
+            const cp = require("child_process");
+            const p = cp.spawn("node", ["src/index.js"], { stdio: ["pipe", "pipe", "inherit"] });
+            p.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }) + "\n");
+            p.stdout.once("data", (data) => {
+              const res = JSON.parse(data.toString());
+              if (!res.result || !res.result.tools || res.result.tools.length === 0) {
+                console.error("❌ Tool discovery failed:", res);
+                process.exit(1);
+              }
+              console.log("✅ CI Verified: " + res.result.tools.length + " MCP tools active.");
+              p.kill("SIGTERM");
+              process.exit(0);
+            });
+          '
+
+      - name: Verify Clean Package Tarball Integrity
         run: npm pack --dry-run
