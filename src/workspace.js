@@ -551,6 +551,77 @@ function parsePerplexityExportFile(filePath) {
 }
 
 /**
+ * Ingest Antigravity & Gemini CLI conversation transcript.jsonl files
+ */
+function parseAntigravitySessionFile(filePath, convId) {
+  try {
+    const stat = fs.statSync(filePath);
+    if (stat.size === 0) return null;
+
+    const raw = fs.readFileSync(filePath, "utf8");
+    const lines = raw.split("\n").filter(l => l.trim().length > 0);
+    if (lines.length === 0) return null;
+
+    let title = null;
+    let firstPrompt = null;
+    let userMessages = 0;
+    let assistantMessages = 0;
+    let toolCalls = 0;
+    const messages = [];
+
+    for (const line of lines) {
+      try {
+        const entry = JSON.parse(line);
+        if (entry.type === "USER_INPUT" || entry.source === "USER_EXPLICIT" || (entry.type === "GENERIC" && entry.source === "USER_EXPLICIT")) {
+          userMessages++;
+          const text = (typeof entry.content === "string" ? entry.content : JSON.stringify(entry.content || "")).trim();
+          if (!firstPrompt) firstPrompt = text.slice(0, 300);
+          messages.push({ role: "user", text, timestamp: entry.created_at || null });
+        } else if (entry.type === "PLANNER_RESPONSE" || entry.source === "MODEL") {
+          assistantMessages++;
+          const text = typeof entry.content === "string" ? entry.content : "";
+          if (text) {
+            messages.push({ role: "assistant", text, timestamp: entry.created_at || null });
+          }
+          if (entry.tool_calls && Array.isArray(entry.tool_calls)) {
+            toolCalls += entry.tool_calls.length;
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (userMessages === 0 && assistantMessages === 0) return null;
+
+    const normalizedTitle = title || (firstPrompt ? firstPrompt.slice(0, 60).replace(/[\r\n]+/g, " ") : `Terminal Session ${convId.slice(0, 8)}`);
+
+    return {
+      sessionId: convId || path.basename(path.dirname(filePath)),
+      platform: "Google Gemini & Antigravity CLI",
+      source: "Antigravity CLI Session Transcript",
+      account: "Local Antigravity Agent",
+      project: "Antigravity CLI Brain",
+      filePath,
+      fileSize: stat.size,
+      title: normalizedTitle,
+      firstPrompt: firstPrompt || "Terminal Session",
+      userMessages,
+      assistantMessages,
+      toolCalls,
+      estimatedTokens: Math.round(raw.length / 4),
+      createdDate: stat.birthtime ? stat.birthtime.toISOString() : stat.mtime.toISOString(),
+      updatedDate: stat.mtime.toISOString(),
+      isStub: userMessages === 0,
+      stubReason: userMessages === 0 ? "System logs only" : null,
+      promptHash: hashString((firstPrompt || "").toLowerCase()),
+      evidenceTags: detectEvidenceTags(normalizedTitle, raw.slice(0, 10000)),
+      messages
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
  * -----------------------------------------------------------------------------
  * 2. RECREATE 1 CLEAN TREE DIRECTORY (EVIDENCE VAULT & NORMALIZED CHATS)
  * -----------------------------------------------------------------------------
@@ -558,7 +629,7 @@ function parsePerplexityExportFile(filePath) {
 async function recreateCleanTreeVault(options = {}) {
   const defaultVault = path.join(os.homedir(), "Claude", "AI_EVIDENCE_VAULT");
   const vaultRoot = resolveHome(options.evidenceVaultPath || defaultVault);
-  const limitPerSource = typeof options.limitPerSource === "number" ? options.limitPerSource : 500;
+  const limitPerSource = typeof options.limitPerSource === "number" ? options.limitPerSource : 5000;
   const dryRun = options.dryRun !== false; // default true
 
   const results = {
@@ -577,7 +648,7 @@ async function recreateCleanTreeVault(options = {}) {
   const allSessions = [];
   const promptHashMap = new Map();
 
-  // 1. Ingest Claude Desktop / CLI transcripts
+  // 1. Ingest ALL Claude Desktop & Claude Code CLI Terminal Transcripts
   const claudeCliDir = path.join(os.homedir(), ".claude", "projects");
   if (fs.existsSync(claudeCliDir)) {
     try {
@@ -595,14 +666,48 @@ async function recreateCleanTreeVault(options = {}) {
     } catch (_) {}
   }
 
-  // 2. Ingest Claude Web Exports
+  // 2. Ingest ALL Antigravity & Gemini CLI Terminal Transcripts
+  const antigravityBrainDir = path.join(os.homedir(), ".gemini", "antigravity-cli", "brain");
+  if (fs.existsSync(antigravityBrainDir)) {
+    try {
+      const bEntries = fs.readdirSync(antigravityBrainDir, { withFileTypes: true });
+      for (const b of bEntries) {
+        if (b.isDirectory()) {
+          const logPath = path.join(antigravityBrainDir, b.name, ".system_generated", "logs", "transcript.jsonl");
+          if (fs.existsSync(logPath)) {
+            const agItem = parseAntigravitySessionFile(logPath, b.name);
+            if (agItem) allSessions.push(agItem);
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 3. Ingest Apex Sovereign & Terminal Session Command Logs
+  const sessionLogDir = path.join(os.homedir(), ".axd", "session-commands-log");
+  if (fs.existsSync(sessionLogDir)) {
+    try {
+      const sFiles = fs.readdirSync(sessionLogDir).filter(f => f.endsWith(".md"));
+      for (const sf of sFiles) {
+        const fullPath = path.join(sessionLogDir, sf);
+        const sItems = parsePerplexityExportFile(fullPath);
+        sItems.forEach(i => {
+          i.platform = "AXD Terminal & Apex Sovereign";
+          i.project = "Apex Sovereign Terminal Bus";
+          allSessions.push(i);
+        });
+      }
+    } catch (_) {}
+  }
+
+  // 4. Ingest Claude Web Exports
   const claudeWebPath = path.join(os.homedir(), "Downloads", "sovereign_scrape", "claude-diego", "conversations_COMPLETE_415_20260815.json");
   if (fs.existsSync(claudeWebPath)) {
     const webItems = parseClaudeWebExportFile(claudeWebPath, limitPerSource);
     webItems.forEach(i => allSessions.push(i));
   }
 
-  // 3. Ingest OpenAI Exports
+  // 5. Ingest OpenAI Exports
   const openAiSources = [
     { path: path.join(os.homedir(), "Downloads", "sovereign_scrape", "chatgpt-diego", "conversations_human.json"), account: "ChatGPT Diego (Human)" },
     { path: path.join(os.homedir(), "Downloads", "sovereign_scrape", "chatgpt-axd-hotmail", "conversations.json"), account: "ChatGPT Hotmail" },
@@ -617,7 +722,7 @@ async function recreateCleanTreeVault(options = {}) {
     }
   }
 
-  // 4. Ingest Perplexity Scrapes / Gemini / Antigravity files
+  // 6. Ingest Perplexity Scrapes / Research files
   const perplexityDir = path.join(os.homedir(), "§00_AXD_Sovereign_empire", "§01_AXD_Ghost_MCP_platform", "Main");
   if (fs.existsSync(perplexityDir)) {
     try {
@@ -629,7 +734,7 @@ async function recreateCleanTreeVault(options = {}) {
     } catch (_) {}
   }
 
-  // 5. Ingest Antigravity & Gemini Code markdown files
+  // 7. Ingest Gemini Code markdown files
   const downloadsDir = path.join(os.homedir(), "Downloads");
   if (fs.existsSync(downloadsDir)) {
     try {
